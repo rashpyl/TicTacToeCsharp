@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace TicTacToe
@@ -10,7 +12,7 @@ namespace TicTacToe
     {
         public enum Player
         {
-            X, O
+            X, O, None
         }
 
         Player currentPlayer;
@@ -21,10 +23,18 @@ namespace TicTacToe
         int rowsAndColumns = 5; // Default grid size
         int buttonSize;
 
+        private Dictionary<string, int> memoizationTable = new Dictionary<string, int>();
+
+        private Player[,] gameBoard;
+
+        int moves = 0;
+
         public Form1(int gridRowsAndColumns)
         {
             // Set the grid size based on the input parameter
-            rowsAndColumns = gridRowsAndColumns; 
+            rowsAndColumns = gridRowsAndColumns;
+
+            gameBoard = new Player[rowsAndColumns, rowsAndColumns];
 
             InitializeComponent();
 
@@ -40,25 +50,38 @@ namespace TicTacToe
 
         private void PlayerClickButton(object sender, EventArgs e)
         {
-            var button = (Button)sender;
+            if (currentPlayer == Player.X)
+            {
 
-            currentPlayer = Player.X;
-            button.Text = currentPlayer.ToString();
+                var button = (Button)sender;
 
-            // Disable the button after a move
-            button.Enabled = false;
+                button.Text = currentPlayer.ToString();
 
-            // Change button color for visual feedback
-            button.BackColor = Color.PowderBlue;
+                // Disable the button after a move
+                button.Enabled = false;
 
-            // Remove the button from the available moves
-            buttons.Remove(button);
+                // Change button color for visual feedback
+                button.BackColor = Color.PowderBlue;
 
-            // Check if the game has ended
-            CheckGame();
+                // Update the game board matrix with the human's move
+                int rowIndex = button.TabIndex / rowsAndColumns;
+                int colIndex = button.TabIndex % rowsAndColumns;
+                gameBoard[rowIndex, colIndex] = currentPlayer;
 
-            // Start the CPU's turn timer
-            CPUTimer.Start(); 
+                // Increment the moves count
+                moves++;
+
+                // Remove the button from the available moves
+                buttons.Remove(button);
+
+                // Check if the game has ended
+                CheckGame();
+
+                currentPlayer = Player.O;
+
+                // Start the CPU's turn timer
+                CPUTimer.Start();
+            }
         }
 
         private void RestartGame(object sender, EventArgs e)
@@ -68,45 +91,164 @@ namespace TicTacToe
             RestartGame(); 
         }
 
-        private int GetBestMove()
+        private int GetRandomMove()
         {
-            int bestMove = -1;
-            int bestScore = int.MinValue;
-            int alpha = int.MinValue;
-            int beta = int.MaxValue;
+            List<int> availableMoves = new List<int>();
 
             for (int i = 0; i < buttons.Count; i++)
             {
                 if (buttons[i].Enabled)
                 {
-                    buttons[i].Text = currentPlayer.ToString();
-                    int score = MiniMax(buttons, 0, alpha, beta, false);
-                    buttons[i].Text = "?";
-
-                    if (score > bestScore)
-                    {
-                        bestScore = score;
-                        bestMove = i;
-                    }
-                    alpha = Math.Max(alpha, bestScore);
+                    availableMoves.Add(i);
                 }
+            }
+
+            // Select a random move from the available moves
+            int randomIndex = random.Next(availableMoves.Count);
+            return availableMoves[randomIndex];
+        }
+
+        private int GetBestMove()
+        {
+            int bestMove = -1;
+
+            if (moves < (rowsAndColumns * rowsAndColumns) - 9)
+            {
+                bestMove = GetRandomMove();
+            }
+
+            else
+            {
+                int bestScore = int.MinValue;
+
+                for (int i = 0; i < buttons.Count; i++)
+                {
+                    if (buttons[i].Enabled)
+                    {
+                        int rowIndex = buttons[i].TabIndex / rowsAndColumns;
+                        int colIndex = buttons[i].TabIndex % rowsAndColumns;
+
+                        // Make a copy of the game board
+                        Player[,] board = CloneGameBoard(gameBoard);
+
+                        // Update the copy with the potential move
+                        board[rowIndex, colIndex] = currentPlayer;
+
+                        // Calculate the score using MiniMax on the copy
+                        int score = MiniMax(board, moves + 1, false);
+
+                        if (score > bestScore)
+                        {
+                            bestScore = score;
+                            bestMove = i;
+                        }
+                    }
+                }
+            }
+            // Update the gameBoard with the best move
+            if (bestMove != -1)
+            {
+                int rowIndex = buttons[bestMove].TabIndex / rowsAndColumns;
+                int colIndex = buttons[bestMove].TabIndex % rowsAndColumns;
+                gameBoard[rowIndex, colIndex] = Player.O; // Assuming AI is Player.O
             }
 
             return bestMove;
         }
 
+        private int MiniMax(Player[,] currentBoard, int depth, bool isMaximizing)
+        {
+            // Convert the current board state into a string representation
+            string boardKey = BoardToString(currentBoard);
+
+            // Check if the score for this board state is already cached
+            if (memoizationTable.ContainsKey(boardKey))
+            {
+                return memoizationTable[boardKey];
+            }
+
+            // Check for a win for Player.O (CPU)
+            if (CheckWin(currentBoard, Player.O))
+            {
+                memoizationTable[boardKey] = rowsAndColumns * rowsAndColumns + 1;
+                return memoizationTable[boardKey];
+            }
+
+            // Check for a win for Player.X (human)
+            if (CheckWin(currentBoard, Player.X))
+            {
+                memoizationTable[boardKey] = -(rowsAndColumns * rowsAndColumns + 1);
+                return memoizationTable[boardKey];
+            }
+            else if (depth == rowsAndColumns * rowsAndColumns)
+            {
+                memoizationTable[boardKey] = 0;
+                return memoizationTable[boardKey];
+            }
+
+            if (isMaximizing)
+            {
+                int bestScore = int.MinValue;
+                for (int i = 0; i < rowsAndColumns; i++)
+                {
+                    for (int j = 0; j < rowsAndColumns; j++)
+                    {
+                        if (currentBoard[i, j] == Player.None)
+                        {
+                            currentBoard[i, j] = Player.O;
+                            int score = MiniMax(currentBoard, depth + 1, false);
+                            currentBoard[i, j] = Player.None;
+                            bestScore = Math.Max(score, bestScore);
+                        }
+                    }
+                }
+                memoizationTable[boardKey] = bestScore;
+                return bestScore;
+            }
+            else
+            {
+                int bestScore = int.MaxValue;
+                for (int i = 0; i < rowsAndColumns; i++)
+                {
+                    for (int j = 0; j < rowsAndColumns; j++)
+                    {
+                        if (currentBoard[i, j] == Player.None)
+                        {
+                            currentBoard[i, j] = Player.X;
+                            int score = MiniMax(currentBoard, depth + 1, true);
+                            currentBoard[i, j] = Player.None;
+                            bestScore = Math.Min(score, bestScore);
+                        }
+                    }
+                }
+                memoizationTable[boardKey] = bestScore;
+                return bestScore;
+            }
+        }
+
+        // Helper function to convert the board state into a string for caching
+        private string BoardToString(Player[,] board)
+        {
+            StringBuilder builder = new StringBuilder();
+            for (int i = 0; i < rowsAndColumns; i++)
+            {
+                for (int j = 0; j < rowsAndColumns; j++)
+                {
+                    builder.Append((int)board[i, j]); // Convert Player enum to int
+                }
+            }
+            return builder.ToString();
+        }
+
         private void CPUmove(object sender, EventArgs e)
         {
-            if (buttons.Count > 0)
+            if (buttons.Count > 0 && currentPlayer == Player.O)
             {
                 // Use the GetBestMove function to find the best move for the CPU
                 int bestMoveIndex = GetBestMove();
 
                 // Disable the selected button to prevent further moves on it
                 buttons[bestMoveIndex].Enabled = false;
-
-                // Set the current player to 'O' (CPU's symbol)
-                currentPlayer = Player.O;
 
                 // Set the text of the selected button to 'O' (CPU's symbol)
                 buttons[bestMoveIndex].Text = currentPlayer.ToString();
@@ -117,11 +259,38 @@ namespace TicTacToe
                 // Remove the selected button from the list of available moves
                 buttons.RemoveAt(bestMoveIndex);
 
+                currentPlayer = Player.X;
+
+                moves++;
+
                 // Check if the game has ended after the CPU's move
                 CheckGame();
             }
         }
 
+        // This method creates a clone (copy) of a 2D game board representing the state of a Tic-Tac-Toe game.
+
+        private Player[,] CloneGameBoard(Player[,] originalBoard)
+        {
+            // Get the number of rows and columns in the original game board.
+            int rows = originalBoard.GetLength(0);
+            int cols = originalBoard.GetLength(1);
+
+            // Create a new 2D array to store the cloned game board with the same dimensions.
+            Player[,] clonedBoard = new Player[rows, cols];
+
+            // Iterate through each cell of the original board and copy the player's mark to the cloned board.
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    clonedBoard[i, j] = originalBoard[i, j];
+                }
+            }
+
+            // Return the cloned game board, which now contains an identical copy of the original game state.
+            return clonedBoard;
+        }
 
 
         private void CheckGame()
@@ -209,61 +378,60 @@ namespace TicTacToe
             Size = new Size(maxOverallSize, maxOverallSize + 130);
         }
 
-
-        private int MiniMax(List<Button> currentButtons, int depth, int alpha, int beta, bool isMaximizing)
+        private bool CheckWin(Player[,] board, Player player)
         {
-            // Check if O has won
-            bool isOWinner = CheckWin(Player.O.ToString());
-
-            // Check if X has won
-            bool isXWinner = CheckWin(Player.X.ToString());
-
-            // Terminal states: win, lose, or draw
-            if (isOWinner)
-                return 10;
-            else if (isXWinner)
-                return -10;
-            else if (currentButtons.Count == 0)
-                return 0;
-
-            if (isMaximizing)
+            // Check rows
+            for (int row = 0; row < rowsAndColumns; row++)
             {
-                int bestScore = int.MinValue;
-                foreach (Button button in currentButtons)
+                int count = 0;
+                for (int col = 0; col < rowsAndColumns; col++)
                 {
-                    if (button.Enabled)
+                    if (board[row, col] == player)
                     {
-                        button.Text = Player.O.ToString();
-                        int score = MiniMax(currentButtons, depth + 1, alpha, beta, false);
-                        button.Text = "?";
-                        bestScore = Math.Max(score, bestScore);
-                        alpha = Math.Max(alpha, score);
-                        if (beta <= alpha)
-                            break; // Beta cutoff
+                        count++;
+                        if (count == rowsAndColumns)
+                            return true;
                     }
                 }
-                return bestScore;
             }
-            else
+
+            // Check columns
+            for (int col = 0; col < rowsAndColumns; col++)
             {
-                int bestScore = int.MaxValue;
-                foreach (Button button in currentButtons)
+                int count = 0;
+                for (int row = 0; row < rowsAndColumns; row++)
                 {
-                    if (button.Enabled)
+                    if (board[row, col] == player)
                     {
-                        button.Text = Player.X.ToString();
-                        int score = MiniMax(currentButtons, depth + 1, alpha, beta, true);
-                        button.Text = "?";
-                        bestScore = Math.Min(score, bestScore);
-                        beta = Math.Min(beta, score);
-                        if (beta <= alpha)
-                            break; // Alpha cutoff
+                        count++;
+                        if (count == rowsAndColumns)
+                            return true;
                     }
                 }
-                return bestScore;
             }
+
+            // Check diagonals
+            int diagonal1Count = 0;
+            int diagonal2Count = 0;
+            for (int i = 0; i < rowsAndColumns; i++)
+            {
+                if (board[i, i] == player)
+                {
+                    diagonal1Count++;
+                    if (diagonal1Count == rowsAndColumns)
+                        return true;
+                }
+
+                if (board[i, rowsAndColumns - i - 1] == player)
+                {
+                    diagonal2Count++;
+                    if (diagonal2Count == rowsAndColumns)
+                        return true;
+                }
+            }
+
+            return false;
         }
-
 
         // Check for a win for the specified player symbol
         private bool CheckWin(string player)
@@ -345,6 +513,8 @@ namespace TicTacToe
 
             buttons.Remove(buttonRestart);
 
+            moves = 0;
+
             foreach (Button button in buttons)
             {
                 if (button.Name != "buttonRestart")
@@ -352,6 +522,15 @@ namespace TicTacToe
                     button.Enabled = true;
                     button.Text = "?";
                     button.BackColor = DefaultBackColor;
+                }
+            }
+
+            // Clear the game board matrix
+            for (int i = 0; i < rowsAndColumns; i++)
+            {
+                for (int j = 0; j < rowsAndColumns; j++)
+                {
+                    gameBoard[i, j] = Player.None;
                 }
             }
         }

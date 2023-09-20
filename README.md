@@ -1,1 +1,1 @@
-Dokumentace je s souboru Dokumentace Piskvorky
+Dokumentace je v souboru Dokumentace Piskvorky

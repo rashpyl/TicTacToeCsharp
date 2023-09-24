@@ -15,17 +15,17 @@ namespace TicTacToe
             X, O, None
         }
 
-        Player currentPlayer;
+        public Player currentPlayer;
         Random random = new Random();
         int humanWinCount = 0;
         int CPUWinCount = 0;
-        List<Button> buttons;
-        int rowsAndColumns = 5; // Default grid size
+        public List<Button> buttons;
+        public int rowsAndColumns = 5; // Default grid size
         int buttonSize;
 
         private Dictionary<string, int> memoizationTable = new Dictionary<string, int>();
 
-        private Player[,] gameBoard;
+        public Player[,] gameBoard;
 
         int moves = 0;
 
@@ -108,7 +108,7 @@ namespace TicTacToe
             return availableMoves[randomIndex];
         }
 
-        private int GetBestMove()
+        public int GetBestMove()
         {
             int bestMove = -1;
 
@@ -378,7 +378,7 @@ namespace TicTacToe
             Size = new Size(maxOverallSize, maxOverallSize + 130);
         }
 
-        private bool CheckWin(Player[,] board, Player player)
+        public bool CheckWin(Player[,] board, Player player)
         {
             // Check rows
             for (int row = 0; row < rowsAndColumns; row++)
